@@ -25,8 +25,6 @@ public class WDConnector implements WifiBase.WifiStatusCallBack, WifiBase.HandSh
     // and I don't want to rely that it comes with all firmware & device  versions
     Boolean wifiIsEnabled = false;
 
-
-
     public enum ConnectionState{
         Idle,
         NotInitialized,
@@ -126,7 +124,7 @@ public class WDConnector implements WifiBase.WifiStatusCallBack, WifiBase.HandSh
         if (channel != null && p2p != null) {
             print_line("", "Starting WifiServiceSearcher");
             setConnectionState(ConnectionState.FindingPeers);
-            mWifiServiceSearcher = new WifiServiceSearcher(this.context, p2p, channel, this);
+            mWifiServiceSearcher = new WifiServiceSearcher(this.context, p2p, channel, this,WifiBase.SERVICE_TYPE);
             mWifiServiceSearcher.Start();
         }
     }
@@ -262,6 +260,7 @@ public class WDConnector implements WifiBase.WifiStatusCallBack, WifiBase.HandSh
 
     @Override
     public void gotServicesList(List<ServiceItem> list) {
+
         if(mWifiBase != null && list != null && list.size() > 0) {
 
             if(mWifiConnection != null){
@@ -274,7 +273,6 @@ public class WDConnector implements WifiBase.WifiStatusCallBack, WifiBase.HandSh
                     mWifiConnection = new WifiConnection(that.context, mWifiBase.GetWifiP2pManager(), mWifiBase.GetWifiChannel(), that);
                     mWifiConnection.Start(selItem.deviceAddress);
                     ServiceFoundTimeOutTimer.cancel();
-
 
                 } else {
                     // we'll get discovery stopped event soon enough

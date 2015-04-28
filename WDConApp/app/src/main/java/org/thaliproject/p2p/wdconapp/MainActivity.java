@@ -125,7 +125,6 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
                 ((TextView) findViewById(R.id.cancelCount)).setText("" + ConCancelCounter);
 
                 print_line("CHAT", "WE got timeout on receiving data, lets Disconnect.");
-                stopConnectedThread();
                 stopConnector();
                 StartConnector();
             }else{
@@ -140,11 +139,7 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
         }
         public void onFinish() {
             // no clients queuing up, thus lets reset the group now.
-            if(mWDConnector != null){
-                mWDConnector.Stop();
-                mWDConnector = null;
-            }
-
+            stopConnector();
             final Handler handler = new Handler();
             handler.postDelayed(new Runnable() {
                 //Lets give others chance on creating new group before we come back online
@@ -205,6 +200,8 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
     }
 
     public void stopConnector() {
+        stopConnectedThread();
+        stopConnectToThread();
         stopListenerThread();
 
         if(mWDConnector != null) {
@@ -222,15 +219,13 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
 
     @Override
     public void onDestroy() {
-        this.mWakeLock.release();
         super.onDestroy();
+
+        this.mWakeLock.release();
         DisconnectGroupOwnerTimeOut.cancel();
         BigBufferReceivingTimeOut.cancel();
 
         timeHandler.removeCallbacks(mStatusChecker);
-
-        stopConnectedThread();
-        stopConnectToThread();
 
         stopConnector();
 
@@ -292,6 +287,12 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
     @Override
     public void GroupInfoChanged(WifiP2pGroup group) {
 
+        if(group.getClientList().size() > 0){
+            // we have clients connected
+        }else {
+            // we have lost our last client
+            DisconnectGroupOwnerTimeOut.start();
+        }
     }
 
     @Override
@@ -427,6 +428,7 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
             mTestConnectToThread.start();
 
         }else{
+        // lets just see if we get more connections coming in
             DisconnectGroupOwnerTimeOut.start();
         }
     }
@@ -440,7 +442,10 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
 
         mTestConnectedThread = new TestConnectedThread(socket, mHandler);
         mTestConnectedThread.start();
-        sayHi();
+
+        if(!amIBigSender) {
+            sayHi();
+        }
     }
 
     @Override
@@ -497,40 +502,36 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
         }));
     }
 
-    // The Handler that gets information back from the BluetoothChatService
+
     private final Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case TestConnectedThread.MESSAGE_WRITE:
-                    if (wroteFirstMessage) {
+                    if (amIBigSender) {
                         timeCounter = 0;
                         wroteDataAmount = wroteDataAmount + msg.arg1;
                         ((TextView) findViewById(R.id.CountBox)).setText("" + wroteDataAmount);
                         if (wroteDataAmount == 1048576) {
                             if (mTestDataFile != null) {
-                                sendMessageCounter = sendMessageCounter+ 1;
+                                // lets do saving after we got ack received
+                                //sendMessageCounter = sendMessageCounter+ 1;
+                                //((TextView) findViewById(R.id.msgSendCount)).setText("" + sendMessageCounter);
                                 mTestDataFile.SetTimeNow(TestDataFile.TimeForState.GoBigtData);
                                 long timeval = mTestDataFile.timeBetween(TestDataFile.TimeForState.GoBigtData, TestDataFile.TimeForState.GotData);
 
-                                String sayoutloud = "Send megabyte in : ";
-                                if(timeval > 1000) {
-                                    sayoutloud = sayoutloud + (timeval / 1000) + " seconds.";
-                                }else{
-                                    sayoutloud = sayoutloud + timeval + " milliseconds";
-                                }
+                                final String sayoutloud = "Send megabyte in : " + (timeval / 1000) + " seconds.";
 
-                                //We'll write values to store when we get ack
-                                DataStateChanged(DataState.WaitingAct);
+                                // lets do saving after we got ack received
+                                //mTestDataFile.WriteDebugline("BigSender");
+
                                 print_line("CHAT", sayoutloud);
                                 mySpeech.speak(sayoutloud);
                             }
-                            wroteFirstMessage = false;
-                            gotFirstMessage = false;
-
-                            ((TextView) findViewById(R.id.msgSendCount)).setText("" + sendMessageCounter);
+                            DataStateChanged(DataState.WaitingAct);
                         }
                     } else {
+                        DataStateChanged(DataState.WaitingBigdata);
                         byte[] writeBuf = (byte[]) msg.obj;// construct a string from the buffer
                         String writeMessage = new String(writeBuf);
                         if (mTestDataFile != null) {
@@ -543,79 +544,71 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
                     }
                     break;
                 case TestConnectedThread.MESSAGE_READ:
-                    if (gotFirstMessage) {
+                    if (!amIBigSender) {
                         gotDataAmount = gotDataAmount + msg.arg1;
                         timeCounter = 0;
                         ((TextView) findViewById(R.id.CountBox)).setText("" + gotDataAmount);
                         BigBufferReceivingTimeOut.cancel();
                         BigBufferReceivingTimeOut.start();
                         if (gotDataAmount == 1048576) {
+                            BigBufferReceivingTimeOut.cancel();
+
+                            gotFirstMessage = false;
+                            gotMessageCounter = gotMessageCounter+ 1;
+                            ((TextView) findViewById(R.id.msgGotCount)).setText("" + gotMessageCounter);
 
                             if (mTestDataFile != null) {
-                                gotMessageCounter = gotMessageCounter+ 1;
                                 mTestDataFile.SetTimeNow(TestDataFile.TimeForState.GoBigtData);
 
                                 long timeval = mTestDataFile.timeBetween(TestDataFile.TimeForState.GoBigtData, TestDataFile.TimeForState.GotData);
+                                final String sayoutloud = "Got megabyte in : " + (timeval / 1000) + " seconds.";
 
-                                String sayoutloud = "Got megabyte in : ";
-
-                                if(timeval > 1000) {
-                                    sayoutloud = sayoutloud + (timeval / 1000) + " seconds.";
-                                }else{
-                                    sayoutloud = sayoutloud + timeval + " milliseconds";
-                                }
-                                if (iWasBigSender) {
-                                    mTestDataFile.WriteDebugline("BigSender");
-                                } else {
-                                    mTestDataFile.WriteDebugline("Receiver");
-                                }
+                                mTestDataFile.WriteDebugline("Receiver");
 
                                 print_line("CHAT", sayoutloud);
                                 mySpeech.speak(sayoutloud);
-
-                                DataStateChanged(DataState.SendingAct);
-                                sayAck();
                             }
 
-                            iWasBigSender = false;
-                            gotFirstMessage = false;
-
-                            ((TextView) findViewById(R.id.msgGotCount)).setText("" + gotMessageCounter);
+                            //got message
+                            DataStateChanged(DataState.SendingAct);
+                            sayAck(gotDataAmount);
                         }
-                    } else if(msg.arg1 < 1000){
+                    } else if(gotFirstMessage) {
+                        print_line("CHAT", "we got Ack message back, so lets disconnect.");
+
+                        sendMessageCounter = sendMessageCounter+ 1;
+                        ((TextView) findViewById(R.id.msgSendCount)).setText("" + sendMessageCounter);
+                        if (mTestDataFile != null) {
+                            mTestDataFile.WriteDebugline("BigSender");
+                        }
+                        DataStateChanged(DataState.Idle);
+                        // we got Ack message back, so lets disconnect
+                        final Handler handler = new Handler();
+                        handler.postDelayed(new Runnable() {
+                            //There are supposedly a possible race-condition bug with the service discovery
+                            // thus to avoid it, we are delaying the service discovery start here
+                            public void run() {
+                                goToNextClientWaiting();
+                            }
+                        }, 1000);
+                    }else{
                         byte[] readBuf = (byte[]) msg.obj;// construct a string from the valid bytes in the buffer
                         String readMessage = new String(readBuf, 0, msg.arg1);
+                        if (mTestDataFile != null) {
+                            mTestDataFile.SetTimeNow(TestDataFile.TimeForState.GotData);
+                        }
 
-                        if(readMessage.startsWith("Got:")){
-                            BigBufferReceivingTimeOut.cancel();
-
-                            if (iWasBigSender) {
-                                mTestDataFile.WriteDebugline("BigSender");
-                                //Got ack so lets continue
-                                goToNextClientWaiting();
-                            } else {
-                                mTestDataFile.WriteDebugline("Receiver");
-                            }
-
-                        }else {
-                            DataStateChanged(DataState.WaitingBigdata);
-
-                            if (mTestDataFile != null) {
-                                mTestDataFile.SetTimeNow(TestDataFile.TimeForState.GotData);
-                            }
-                            receivingTimeOutBaseTime = System.currentTimeMillis();
-                            gotFirstMessage = true;
-                            gotDataAmount = 0;
-                            print_line("CHAT", "Got message: " + readMessage);
-                            if (amIBigSender) {
-                                amIBigSender = false;
-                                sayItWithBigBuffer();
-                            }
+                        gotFirstMessage = true;
+                        print_line("CHAT", "Got message: " + readMessage);
+                        if (amIBigSender) {
+                            DataStateChanged(DataState.SendingBigData);
+                            sayItWithBigBuffer();
                         }
                     }
                     break;
                 case TestConnectedThread.SOCKET_DISCONNEDTED: {
-                    print_line("CHAT", "We are disconnected.");
+                    DataStateChanged(DataState.Idle);
+                    print_line("CHAT", "WE are Disconnected now.");
                     goToNextClientWaiting();
                 }
                 break;
@@ -623,9 +616,9 @@ public class MainActivity extends ActionBarActivity implements WDConnector.WDCal
         }
     };
 
-    private void sayAck() {
+    private void sayAck(long data) {
         if (mTestConnectedThread != null) {
-            String message = "Got:"+gotDataAmount;
+            String message = "Got:"+data;
             print_line("CHAT", "sayAck");
             mTestConnectedThread.write(message.getBytes());
         }

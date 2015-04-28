@@ -16,8 +16,8 @@ import java.io.OutputStream;
  */
 public class TestDataFile {
 
-    private final String fileNameStart = "BTConApp";
-    private final String firstLine= "Os ,Type ,service discovery, Connected ,first data ,GotBigData \n";
+    private final String fileNameStart = "WDAppTTest";
+    private final String firstLine= "Os ,Time ,Type ,service discovery, Connected ,first data ,GotBigData \n";
 
     long State1 = 0; // FoundPeers, 0
     long State2 = 0; // Connecting, 0
@@ -65,7 +65,7 @@ public class TestDataFile {
 
             Log.d(fileNameStart, "File created:" + path + " ,filename : " + sFileName);
         }catch(Exception e){
-            Log.d("FILE", "FileWriter, create file error, :" + e.toString());
+            Log.d("FILE","FileWriter, create file error, :"  + e.toString() );
         }
     }
 
@@ -76,7 +76,7 @@ public class TestDataFile {
                 dbgFile.delete();
             }
         }catch (Exception e){
-            Log.d(fileNameStart, "dbgFile close error :" + e.toString());
+            Log.d(fileNameStart,"dbgFile close error :"  + e.toString() );
         }
     }
 
@@ -106,7 +106,6 @@ public class TestDataFile {
 
                 break;
             case Connected:
-
                 State3 = System.currentTimeMillis(); // Connected
                 long dbgtime3 = (State3 - State2);
                 if(mDebugSummary.State3Max < dbgtime3){
@@ -121,7 +120,6 @@ public class TestDataFile {
                 mDebugSummary.State3Avg = (State3tmp / mDebugSummary.State3Count);
                 break;
             case GotData:
-
                 State4 = System.currentTimeMillis(); // GotData
 
                 long dbgtime4 = (State4 - State3);
@@ -137,7 +135,6 @@ public class TestDataFile {
                 mDebugSummary.State4Avg = (State4tmp / mDebugSummary.State4Count);
                 break;
             case GoBigtData:
-//                ((TextView) context.findViewById(R.id.statusBox)).setBackgroundColor(0xffffffff);
                 State5 = System.currentTimeMillis(); // GoBigtData
 
                 long dbgtime5 = (State5 - State4);
@@ -205,12 +202,13 @@ public class TestDataFile {
 
         try {
             String dbgData = Build.VERSION.SDK_INT + " ," ;
+            dbgData = dbgData  + System.currentTimeMillis()+ " ,";
             dbgData = dbgData  + type + " ,";
 
             dbgData = dbgData + (State2 - State1) + " ,";
             dbgData = dbgData + (State3 - State2) + " ,";
             dbgData = dbgData + (State4 - State3) + " ,";
-            dbgData = dbgData + (State5 - State4) + "\n";
+            dbgData = dbgData + (State5 - State4) + " \n";
 
             Log.d("FILE", "write: " + dbgData);
             dbgFileOs.write(dbgData.getBytes());

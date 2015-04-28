@@ -28,6 +28,7 @@ public class WifiServiceSearcher {
     private Context context;
     private BroadcastReceiver receiver;
     private IntentFilter filter;
+    private String SERVICE_TYPE;
 
     private final WifiBase.WifiStatusCallBack callback;
     private WifiP2pManager p2p;
@@ -57,11 +58,12 @@ public class WifiServiceSearcher {
 
     CountDownTimer peerDiscoveryTimer = null;
 
-    public WifiServiceSearcher(Context Context, WifiP2pManager Manager, WifiP2pManager.Channel Channel, WifiBase.WifiStatusCallBack handler) {
+    public WifiServiceSearcher(Context Context, WifiP2pManager Manager, WifiP2pManager.Channel Channel, WifiBase.WifiStatusCallBack handler,String serviceType) {
         this.context = Context;
         this.p2p = Manager;
         this.channel = Channel;
         this.callback = handler;
+        this.SERVICE_TYPE = serviceType;
 
         Random ran = new Random(System.currentTimeMillis());
 
@@ -78,6 +80,7 @@ public class WifiServiceSearcher {
             public void onFinish() {
                 myServiceState = ServiceState.NONE;
                 if(callback != null) {
+                    stopDiscovery();
                     callback.gotServicesList(myServiceList);
                 }else{
                     startPeerDiscovery();
@@ -109,16 +112,19 @@ public class WifiServiceSearcher {
                     // so need to make sure we only make one service discovery call
                     if(myServiceState != ServiceState.DiscoverService) {
 
-                        boolean cont = true;
+                        boolean doContinue = true;
                         if(callback != null) {
-                            cont = callback.gotPeersList(pers.getDeviceList());
+                            doContinue = callback.gotPeersList(pers.getDeviceList());
                         }
-                        if(cont) {
+
+                        if(doContinue) {
                             //tests have shown that if we have multiple peers with services advertising
                             // who disappear same time when we do this, there is a chance that we get stuck
                             // thus, if this happens, in 60 seconds we'll cancel this query and start peer discovery again
                             ServiceDiscoveryTimeOutTimer.start();
                             startServiceDiscovery();
+                        }else{
+                            ServiceDiscoveryTimeOutTimer.cancel();
                         }
                     }
                 }
@@ -131,7 +137,7 @@ public class WifiServiceSearcher {
 
                 debug_print("Found Service, :" + instanceName + ", type" + serviceType + ":");
 
-                if (serviceType.startsWith(WifiBase.SERVICE_TYPE)) {
+                if (serviceType.startsWith(SERVICE_TYPE)) {
                     boolean addService = true;
                     for (int i=0; i<myServiceList.size(); i++) {
                         if(myServiceList.get(i).deviceAddress.equals(device.deviceAddress)){
@@ -143,7 +149,7 @@ public class WifiServiceSearcher {
                     }
 
                 } else {
-                    debug_print("Not our Service, :" + WifiBase.SERVICE_TYPE + "!=" + serviceType + ":");
+                    debug_print("Not our Service, :" + SERVICE_TYPE + "!=" + serviceType + ":");
                 }
 
                 ServiceDiscoveryTimeOutTimer.cancel();
@@ -196,7 +202,7 @@ public class WifiServiceSearcher {
 
         myServiceState = ServiceState.DiscoverService;
 
-        WifiP2pDnsSdServiceRequest request = WifiP2pDnsSdServiceRequest.newInstance(WifiBase.SERVICE_TYPE);
+        WifiP2pDnsSdServiceRequest request = WifiP2pDnsSdServiceRequest.newInstance(SERVICE_TYPE);
         final Handler handler = new Handler();
         p2p.addServiceRequest(channel, request, new WifiP2pManager.ActionListener() {
 
@@ -241,7 +247,7 @@ public class WifiServiceSearcher {
         });
     }
     private void debug_print(String buffer) {
-        //Log.i("Service searcher", buffer);
+        Log.i("Service searcher", buffer);
     }
     private class ServiceSearcherReceiver extends BroadcastReceiver {
 
@@ -258,8 +264,8 @@ public class WifiServiceSearcher {
                 String persTatu = "Discovery state changed to ";
 
                 if(state == WifiP2pManager.WIFI_P2P_DISCOVERY_STOPPED){
-                    persTatu = persTatu + "Stopped weare with Discoveries .";
-                    //startPeerDiscovery();
+                    persTatu = persTatu + "Stopped.";
+                    startPeerDiscovery();
                 }else if(state == WifiP2pManager.WIFI_P2P_DISCOVERY_STARTED){
                     persTatu = persTatu + "Started.";
                 }else{
